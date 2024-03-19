@@ -86,7 +86,7 @@ void write_output(const std::vector<Wire>& wires, const int num_wires, const std
 
   out_wires.close();
 }
-int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int flag){
+int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int flag){
   // If flag == -1, decrement occupancy along route
   // If flag == 1, increment occupancy along route
   // If flag == 0, calculate cost of adding the route
@@ -123,10 +123,10 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
   }
   for (int i = start_y ; i != bend1_y; i += stepi1){
     if (flag == 0){
-      cost += occupancy[i][start_x] + 1;
+      cost += occupancy[i * dim_x + start_x] + 1;
     }
     else {
-      occupancy[i][start_x] += flag;
+      occupancy[i * dim_x + start_x] += flag;
     }
   }
   int stepi2 = 1;
@@ -136,10 +136,10 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
   }
   for (int i = start_x; i != bend1_x; i += stepi2 ) {
     if (flag == 0){
-      cost += occupancy[start_y][i] + 1;
+      cost += occupancy[start_y * dim_x + i] + 1;
     }
     else {
-      occupancy[start_y][i] += flag;
+      occupancy[start_y * dim_x + i] += flag;
     }
   }
 
@@ -153,10 +153,10 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
   for (int i = bend1_x; i !=  bend2_x; i += stepi3) {
     
     if (flag == 0){
-      cost += occupancy[bend1_y][i] + 1;
+      cost += occupancy[bend1_y * dim_x + i] + 1;
     }
     else {
-      occupancy[bend1_y][i] += flag;
+      occupancy[bend1_y * dim_x + i] += flag;
     }
   }
 
@@ -169,10 +169,10 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
   for (int i = bend1_y; i !=  bend2_y; i += stepi4) {
     
     if (flag == 0){
-      cost += occupancy[i][bend1_x] + 1;
+      cost += occupancy[i * dim_x + bend1_x] + 1;
     }
     else {
-      occupancy[i][bend1_x] += flag;
+      occupancy[i * dim_x + bend1_x] += flag;
     }
   }
 
@@ -186,11 +186,11 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
   // BEND 2 TO END
   for (int i = bend2_x ; i != end_x; i += stepi5) {
     if (flag == 0){
-      cost += occupancy[end_y][i] + 1;
+      cost += occupancy[end_y * dim_x + i] + 1;
     }
     else {
     
-      occupancy[end_y][i] += flag;
+      occupancy[end_y * dim_x + i] += flag;
       
       
     }
@@ -204,11 +204,11 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
   for (int i = bend2_y; i !=  end_y; i +=stepi6) {
     
     if (flag == 0){
-      cost += occupancy[i][end_x] + 1;
+      cost += occupancy[i * dim_x + end_x] + 1;
     }
     else {
 
-        occupancy[i][end_x] += flag; 
+        occupancy[i * dim_x + end_x] += flag; 
       
       
     }
@@ -216,11 +216,11 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
 
   // INCLUDE END POINT
   if (flag == 0){
-      cost += occupancy[end_y][end_x] + 1;
+      cost += occupancy[end_y * dim_x + end_x] + 1;
     }
   else {
    
-    occupancy[end_y][end_x] += flag;
+    occupancy[end_y * dim_x + end_x] += flag;
     
     
   }
@@ -362,30 +362,54 @@ int main(int argc, char *argv[]) {
    MPI_Type_commit(&mpi_wire_struct);
 
    
-  printf("starting\n");
    
 
-  int **occupancy;
+  int *occupancy;
+  int num_batches;
   if (pid == 0) {
-    occupancy = alloc_2d_int(dim_y, dim_x) ;
+    occupancy = (int*)calloc(sizeof(int), (dim_x*dim_y));
+    num_batches = (num_wires + batch_size - 1) / batch_size;
   }
-  int num_batches = (num_wires + batch_size - 1) / batch_size;
+
+  
+  // printf("num batches = %d \n", num_batches);
 
   if(pid == 0){
-          printf("iter 0\n");
           for(int wireIndex = 0; wireIndex < num_wires; wireIndex++)
           {
             struct Wire currWire = wires[wireIndex];
-            currWire.bend1_x = currWire.start_x;
-            currWire.bend1_y = currWire.end_y;
-            wires[wireIndex] = currWire;
             refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
           }
           
       }
-
-  MPI_Bcast(&(occupancy[0][0]),
-              dim_x*dim_y,
+  
+  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Bcast(&dim_x,
+              1,
+              MPI_INT,
+              0, 
+              MPI_COMM_WORLD);
+  MPI_Bcast(&dim_y,
+              1,
+              MPI_INT,
+              0, 
+              MPI_COMM_WORLD);
+  MPI_Bcast(&num_wires,
+              1,
+              MPI_INT,
+              0, 
+              MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (pid != 0) {
+    occupancy = (int*)calloc(sizeof(int), dim_x*dim_y);
+  }
+  MPI_Bcast((void*)occupancy,
+              (dim_x*dim_y),
+              MPI_INT,
+              0,
+              MPI_COMM_WORLD);
+  MPI_Bcast((void*)&num_batches,
+              1,
               MPI_INT,
               0,
               MPI_COMM_WORLD);
@@ -393,22 +417,15 @@ int main(int argc, char *argv[]) {
   
 
    for (int timestep = 1; timestep < SA_iters; timestep++){
-     
+    //  printf("TEST TEST TEST? \n");
     
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
-      // MPI_Bcast(&(occupancy[0][0]),
-      //         dim_x*dim_y,
-      //         MPI_INT,
-      //         0,
-      //         MPI_COMM_WORLD);
-      printf("do i make it here? \n");
       int *send_counts = (int*)calloc(sizeof(int), nproc);
       int *disp = (int*)calloc(sizeof(int), nproc);
 
       int i = batch_ind * batch_size;
       int b = 0;
       while (b < nproc && i < num_wires){
-        printf("loop\n");
         disp[b] = i;
         send_counts[b] = std::min(batch_size, num_wires - i);
         i += batch_size;
@@ -419,7 +436,7 @@ int main(int argc, char *argv[]) {
         send_counts[b] = 0;
         b += 1;
       }
-
+      // printf("pre scatter1\n");
       struct Wire* local_wires = (struct Wire* )calloc(sizeof(struct Wire), batch_size);
       MPI_Scatterv(((void*)(wires.data() + (batch_ind * batch_size))), 
                 send_counts,
@@ -429,15 +446,17 @@ int main(int argc, char *argv[]) {
                 send_counts[pid],
                 mpi_wire_struct,
                 0, MPI_COMM_WORLD);
-      int num_local_wires;
-      MPI_Scatter((void*)send_counts,
-                nproc,
-                MPI_INT,
-                &num_local_wires,
-                1,
-                MPI_INT,
-                0,
-                MPI_COMM_WORLD);
+      int num_local_wires = send_counts[pid];
+      // printf("num local wires = %d \n", num_local_wires);
+      // MPI_Scatter((void*)send_counts,
+      //           nproc,
+      //           MPI_INT,
+      //           &num_local_wires,
+      //           1,
+      //           MPI_INT,
+      //           0,
+      //           MPI_COMM_WORLD);
+      // printf("working til here\n");
       for (int wireIndex = 0; wireIndex < num_local_wires; wireIndex ++ ){
         struct Wire currWire = local_wires[wireIndex];
         int xi, yi, xf, yf;
@@ -510,6 +529,7 @@ int main(int argc, char *argv[]) {
         refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
       } 
 
+
       MPI_Gatherv((void*)local_wires,
                   send_counts[pid],
                   mpi_wire_struct,
@@ -521,49 +541,46 @@ int main(int argc, char *argv[]) {
       free(local_wires);
       free(send_counts);
       free(disp);
-      int **neighbor_matrix;
+
+      int *neighbor_matrix = (int*)calloc(sizeof(int), dim_x*dim_y);
       if (pid != 0) {
-        MPI_Recv(&neighbor_matrix,
+        MPI_Recv(neighbor_matrix,
                  dim_x * dim_y,
                  MPI_INT,
                  pid - 1,
                  0,
                  MPI_COMM_WORLD,
                  MPI_STATUS_IGNORE);
-        for (int i = 0; i < dim_y; i ++) {
-          for (int j = 0; j < dim_x; j ++){
-            occupancy[i][j] += neighbor_matrix[i][j];
-          }
+        for (int i = 0; i < dim_x * dim_y; i ++) {
+          occupancy[i] += neighbor_matrix[i];
         }
       }
       
-
-      MPI_Send(&occupancy,
+      MPI_Send(occupancy,
                dim_x*dim_y,
                MPI_INT,
                (pid + 1) % nproc,
                0,
                MPI_COMM_WORLD);
       if (pid == 0) {
-        MPI_Recv(&neighbor_matrix,
+        MPI_Recv(neighbor_matrix,
                 dim_x*dim_y,
                 MPI_INT,
                 nproc - 1,
                 0,
                 MPI_COMM_WORLD,
                 MPI_STATUS_IGNORE);
-        for (int i = 0; i < dim_y; i ++) {
-          for (int j = 0; j < dim_x; j ++){
-            occupancy[i][j] += neighbor_matrix[i][j];
-          }
+        for (int i = 0; i < dim_x*dim_y; i ++) {
+          occupancy[i] += neighbor_matrix[i];
+          
         }    
       }
-      MPI_Bcast(&(occupancy[0][0]),
+      MPI_Barrier(MPI_COMM_WORLD);
+      MPI_Bcast(occupancy,
               dim_x*dim_y,
               MPI_INT,
               0,
               MPI_COMM_WORLD);
-
       
         
     }
@@ -585,11 +602,10 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < dim_y; ++i) {
         std::vector<int> row;
         for (int j = 0; j < dim_x; ++j) {
-            row.push_back(occupancy[i][j]);
+            row.push_back(occupancy[i * dim_x + j]);
         }
         vec.push_back(row);
     }
-    free(occupancy[0]);
     free(occupancy);
 
     print_stats(vec);
