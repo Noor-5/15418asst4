@@ -362,7 +362,7 @@ int main(int argc, char *argv[]) {
    MPI_Type_commit(&mpi_wire_struct);
 
    
-
+  printf("starting\n");
    
 
   int **occupancy;
@@ -371,12 +371,8 @@ int main(int argc, char *argv[]) {
   }
   int num_batches = (num_wires + batch_size - 1) / batch_size;
 
-  
-
-  
-
-   for (int timestep = 0; timestep < SA_iters; timestep++){
-    if(timestep == 0 && pid == 0){
+  if(pid == 0){
+          printf("iter 0\n");
           for(int wireIndex = 0; wireIndex < num_wires; wireIndex++)
           {
             struct Wire currWire = wires[wireIndex];
@@ -386,20 +382,33 @@ int main(int argc, char *argv[]) {
             refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
           }
           
-          continue;
       }
-    for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
-      MPI_Bcast(&(occupancy[0][0]),
+
+  MPI_Bcast(&(occupancy[0][0]),
               dim_x*dim_y,
               MPI_INT,
               0,
               MPI_COMM_WORLD);
+
+  
+
+   for (int timestep = 1; timestep < SA_iters; timestep++){
+     
+    
+    for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
+      // MPI_Bcast(&(occupancy[0][0]),
+      //         dim_x*dim_y,
+      //         MPI_INT,
+      //         0,
+      //         MPI_COMM_WORLD);
+      printf("do i make it here? \n");
       int *send_counts = (int*)calloc(sizeof(int), nproc);
       int *disp = (int*)calloc(sizeof(int), nproc);
 
       int i = batch_ind * batch_size;
       int b = 0;
       while (b < nproc && i < num_wires){
+        printf("loop\n");
         disp[b] = i;
         send_counts[b] = std::min(batch_size, num_wires - i);
         i += batch_size;
@@ -549,6 +558,11 @@ int main(int argc, char *argv[]) {
           }
         }    
       }
+      MPI_Bcast(&(occupancy[0][0]),
+              dim_x*dim_y,
+              MPI_INT,
+              0,
+              MPI_COMM_WORLD);
 
       
         
@@ -575,6 +589,8 @@ int main(int argc, char *argv[]) {
         }
         vec.push_back(row);
     }
+    free(occupancy[0]);
+    free(occupancy);
 
     print_stats(vec);
     write_output(wires, num_wires, vec, dim_x, dim_y, nproc, input_filename);
