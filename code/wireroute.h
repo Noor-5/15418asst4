@@ -41,7 +41,7 @@ struct validate_wire_t {
 struct Wire {
   /* Define the data structure for wire here. */ 
   int start_x, start_y, end_x, end_y, bend1_x, bend1_y;
-  validate_wire_t to_validate_format(void) const;
+  // validate_wire_t to_validate_format(void) const;
 };
 
 struct wr_checker {

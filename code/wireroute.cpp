@@ -6,6 +6,7 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include "mpi.h"
 
 #include <mpi.h>
 
@@ -82,6 +83,147 @@ void write_output(const std::vector<Wire>& wires, const int num_wires, const std
   }
 
   out_wires.close();
+}
+int refOccupancy(std::vector<std::vector<int>>& occupancy , struct Wire route, int dim_x, int dim_y, int flag){
+  // If flag == -1, decrement occupancy along route
+  // If flag == 1, increment occupancy along route
+  // If flag == 0, calculate cost of adding the route
+  int bend2_x;
+  int bend2_y;
+  int start_x = route.start_x;
+  int start_y = route.start_y;
+  int end_x = route.end_x;
+  int end_y = route.end_y;
+  int bend1_x = route.bend1_x;
+  int bend1_y = route.bend1_y;
+
+  if (bend1_x == start_x) {
+    bend2_x = end_x;
+    bend2_y = bend1_y;
+  }
+  else if (bend1_y == start_y) {
+    bend2_x = bend1_x;
+    bend2_y = end_y;
+  }
+  else {
+    printf("Should not have got here!\n");
+    return -109823498;
+  }
+
+
+  int cost = 0;
+
+  // START TO BEND 1
+  int stepi1 = 1;
+  if(start_y > bend1_y)
+  {
+    stepi1 = -1;
+  }
+  for (int i = start_y ; i != bend1_y; i += stepi1){
+    if (flag == 0){
+      cost += occupancy[i][start_x] + 1;
+    }
+    else {
+      occupancy[i][start_x] += flag;
+    }
+  }
+  int stepi2 = 1;
+  if(start_x > bend1_x)
+  {
+    stepi2 = -1;
+  }
+  for (int i = start_x; i != bend1_x; i += stepi2 ) {
+    if (flag == 0){
+      cost += occupancy[start_y][i] + 1;
+    }
+    else {
+      occupancy[start_y][i] += flag;
+    }
+  }
+
+
+  int stepi3 = 1;
+  if(bend1_x > bend2_x)
+  {
+    stepi3 = -1;
+  }
+  // BEND 1 TO BEND 2
+  for (int i = bend1_x; i !=  bend2_x; i += stepi3) {
+    
+    if (flag == 0){
+      cost += occupancy[bend1_y][i] + 1;
+    }
+    else {
+      occupancy[bend1_y][i] += flag;
+    }
+  }
+
+  int stepi4 = 1;
+  if(bend1_y > bend2_y)
+  {
+    stepi4 = -1;
+  }
+  
+  for (int i = bend1_y; i !=  bend2_y; i += stepi4) {
+    
+    if (flag == 0){
+      cost += occupancy[i][bend1_x] + 1;
+    }
+    else {
+      occupancy[i][bend1_x] += flag;
+    }
+  }
+
+  int stepi5 = 1;
+  if(bend2_x > end_x)
+  {
+    stepi5 = -1;
+  }
+
+
+  // BEND 2 TO END
+  for (int i = bend2_x ; i != end_x; i += stepi5) {
+    if (flag == 0){
+      cost += occupancy[end_y][i] + 1;
+    }
+    else {
+    
+      occupancy[end_y][i] += flag;
+      
+      
+    }
+  }
+
+  int stepi6 = 1;
+  if(bend2_y > end_y)
+  {
+    stepi6 = -1;
+  }
+  for (int i = bend2_y; i !=  end_y; i +=stepi6) {
+    
+    if (flag == 0){
+      cost += occupancy[i][end_x] + 1;
+    }
+    else {
+
+        occupancy[i][end_x] += flag; 
+      
+      
+    }
+  }
+
+  // INCLUDE END POINT
+  if (flag == 0){
+      cost += occupancy[end_y][end_x] + 1;
+    }
+  else {
+   
+    occupancy[end_y][end_x] += flag;
+    
+    
+  }
+  return cost;
+
 }
 
 int main(int argc, char *argv[]) {
@@ -164,6 +306,8 @@ int main(int argc, char *argv[]) {
 
       /* Read the grid dimension and wire information from file */
       fin >> dim_x >> dim_y >> num_wires;
+      std::vector<std::vector<int>> occupancy(dim_y, std::vector<int>(dim_x)); 
+
 
       wires.resize(num_wires);
       for (auto& wire : wires) {
@@ -177,6 +321,7 @@ int main(int argc, char *argv[]) {
 
   if (pid == 0) {
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
+
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
   }
 
@@ -188,6 +333,72 @@ int main(int argc, char *argv[]) {
    * Feel free to structure the algorithm into different functions
    * Use MPI to parallelize the algorithm. 
    */
+
+   // Create MPI data structure to store wires. Ignores to_validate_format function.
+   const int nitems = 6;
+   int blocklengths[6] = {1, 1, 1, 1, 1, 1};
+   MPI_Datatype types[6] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT}
+   MPI_Aint offsets[6];
+   MPI_Datatype mpi_wire_struct;
+   offsets[0] = offsetof(struct Wire, start_x);
+   offsets[1] = offsetof(struct Wire, start_y);
+   offsets[2] = offsetof(struct Wire, end_x);
+   offsets[3] = offsetof(struct Wire, end_y);
+   offsets[4] = offsetof(struct Wire, bend1_x);
+   offsets[5] = offsetof(struct Wire, bend1_y);
+   MPI_Type_create_struct(nitems, blocklengths, offsets, types,
+                          &mpi_wire_struct);
+   MPI_Type_commit(&mpi_wire_struct);
+
+  //Set up scatterv call.
+   int chunksize = num_wires / nproc;
+   int leftover = num_wires % chunksize;
+   int *send_counts = calloc(sizeof(int), nproc);
+   int *disp = calloc(sizeof(int) nproc);
+   send_counts[0] = chunksize + leftover;
+   disp[0] = 0
+   for (int i = 1; i < nproc; i ++) {
+     send_counts[i] = chunksize;
+     disp[i] = send_counts[i-1];
+   }
+   struct Wire* local_wires = (Wire*)calloc(sizeof(struct Wire), send_counts[pid]);
+   MPI_Scatterv((void*)wires.date(), 
+                send_counts,
+                disp,
+                mpi_wire_struct,
+                (void*)local_wires,
+                send_counts[pid],
+                mpi_wire_struct,
+                0, MPI_COMM_WORLD)
+   int num_local_wires;
+   MPI_Scatter((void*)send_counts,
+                nproc,
+                MPI_INT,
+                &num_local_wires,
+                1,
+                MPI_INT,
+                0,
+                MPI_COMM_WORLD)
+
+   for (int timestep = 0; timestep < SA_iters; timestep++){
+     occ = vec2matrix(occupancy, dim_x, dim_y);
+    if(timestep == 0){
+        for(int wireIndex = 0; wireIndex < num_local_wires; wireIndex++)
+          {
+            struct Wire currWire = local_wires[wireIndex];
+            currWire.bend1_x = currWire.start_x;
+            currWire.bend1_y = currWire.end_y;
+            local_wires[wireIndex] = currWire;
+            refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1,false);
+          }
+    }
+    else {
+      int num_batches = (num_wires + batch_size - 1) / batch_size;
+
+    }
+    
+   }
+
 
   if (pid == 0) {
     const double compute_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - compute_start).count();
