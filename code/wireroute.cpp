@@ -84,7 +84,7 @@ void write_output(const std::vector<Wire>& wires, const int num_wires, const std
 
   out_wires.close();
 }
-int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int flag){
+int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int flag){
   // If flag == -1, decrement occupancy along route
   // If flag == 1, increment occupancy along route
   // If flag == 0, calculate cost of adding the route
@@ -374,6 +374,18 @@ int main(int argc, char *argv[]) {
   
 
    for (int timestep = 0; timestep < SA_iters; timestep++){
+    if(timestep == 0 && pid == 0){
+          for(int wireIndex = 0; wireIndex < num_wires; wireIndex++)
+          {
+            struct Wire currWire = wires[wireIndex];
+            currWire.bend1_x = currWire.start_x;
+            currWire.bend1_y = currWire.end_y;
+            wires[wireIndex] = currWire;
+            refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
+          }
+          
+          continue
+      }
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
       MPI_BCAST(&(occupancy[0][0]),
               dim_x*dim_y,
@@ -384,7 +396,7 @@ int main(int argc, char *argv[]) {
       int *disp = calloc(sizeof(int) nproc);
 
       int i = batch_ind * batch_size;
-      int b = 0
+      int b = 0;
       while (b < nproc && i < num_wires){
         disp[b] = i;
         send_counts[b] = std::min(batch_size, num_wires - i);
@@ -392,11 +404,12 @@ int main(int argc, char *argv[]) {
         b += 1;
       }
       while (b < nproc){
-        disp[b] = 0
+        disp[b] = 0;
         send_counts[b] = 0;
         b += 1
       }
 
+      struct Wire* local_wires = calloc(sizeof(struct Wire), batch_size);
       MPI_Scatterv(((void*)wires.data() + (batch_ind * batch_size)), 
                 send_counts,
                 disp,
@@ -404,7 +417,7 @@ int main(int argc, char *argv[]) {
                 (void*)local_wires,
                 send_counts[pid],
                 mpi_wire_struct,
-                0, MPI_COMM_WORLD)
+                0, MPI_COMM_WORLD);
       int num_local_wires;
       MPI_Scatter((void*)send_counts,
                 nproc,
@@ -414,25 +427,83 @@ int main(int argc, char *argv[]) {
                 MPI_INT,
                 0,
                 MPI_COMM_WORLD);
+      for (int wireIndex = 0; wireIndex < num_local_wires; wireIndex ++ ){
+        struct Wire currWire = local_wires[wireIndex];
+        int xi, yi, xf, yf;
+        xi = currWire.start_x;
+        yi = currWire.start_y;
+        xf = currWire.end_x;
+        yf = currWire.end_y;
+        int delta_x = std::abs(xf - xi);
+        int delta_y = std::abs(yf - yi);
+        if(delta_x != 0 && delta_y != 0 ){
+          refOccupancy(occupancy,currWire,dim_x,dim_y, -1);
+          int initial_cost = refOccupancy(occupancy, currWire, dim_x, dim_y, 0);
+          int min_cost = initial_cost;
+          struct Wire best_route = currWire;
+          struct Wire* possRoutes = (struct Wire*)malloc(sizeof(struct Wire)*(delta_x + delta_y));
+          for (int d_x = 0; d_x < delta_x; d_x += 1 ){
+            if(xi > xf)
+            {
+              currWire.bend1_x = xi - d_x - 1;
+            }
+            else {
+              currWire.bend1_x = xi + d_x + 1;
+            }
+            currWire.bend1_y = yi;
+            int cost = refOccupancy(occupancy, currWire, dim_x, dim_y, 0);
+            if (cost < min_cost) {
+              min_cost = cost;
+              best_route = currWire;
+            }
+            possRoutes[d_x] = currWire;
+          }
+
+          for (int d_y = 0; d_y < delta_y; d_y += 1) {
+            currWire.bend1_x = xi;
+            if (yi > yf) {
+              currWire.bend1_y = yi - d_y - 1;
+            }
+            else {
+              currWire.bend1_y = yi + d_y + 1;
+            }
+            int cost = refOccupancy(occupancy, currWire, dim_x, dim_y, 0);
+            if (cost < min_cost) {
+              min_cost = cost;
+              best_route = currWire;
+            }
+            possRoutes[delta_x + d_y] = currWire;
+          }
+
+          std::random_device rd;  // obtain a random number from hardware
+          std::mt19937 gen(rd()); // seed the generator
+
+          // Define a distribution (uniform distribution between 0 and 1)
+          std::uniform_real_distribution<> dis(0.0, 1.0);
+
+          // Generate a random number between 0 and 1
+          float random_number = dis(gen);
+          if (random_number < SA_prob){
+            std::uniform_int_distribution<> dis(0, delta_x + delta_y - 1);
+            int random_index= dis(gen);
+            local_wires[wireIndex] = possRoutes[random_index];
+          }
+          else{
+            local_wires[wireIndex] = best_route;
+          }
+          free(possRoutes);
+        }
+
+      }
+      for (int w = 0; w < num_local_wires; w++){    
+        refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1,true);
+      } 
       
         
     }
 
     
-    if(timestep == 0){
-        for(int wireIndex = 0; wireIndex < num_local_wires; wireIndex++)
-          {
-            struct Wire currWire = local_wires[wireIndex];
-            currWire.bend1_x = currWire.start_x;
-            currWire.bend1_y = currWire.end_y;
-            local_wires[wireIndex] = currWire;
-            refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
-          }
-    }
-    else {
-      int num_batches = (num_wires + batch_size - 1) / batch_size;
-
-    }
+    
     
    }
 
