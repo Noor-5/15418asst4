@@ -420,6 +420,7 @@ int main(int argc, char *argv[]) {
     //  printf("TEST TEST TEST? \n");
     
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
+      // printf("batch = %d\n", batch_ind);
       int *send_counts = (int*)calloc(sizeof(int), nproc);
       int *disp = (int*)calloc(sizeof(int), nproc);
 
@@ -538,7 +539,6 @@ int main(int argc, char *argv[]) {
                   disp,
                   mpi_wire_struct,
                   0, MPI_COMM_WORLD);
-      free(local_wires);
       free(send_counts);
       free(disp);
 
@@ -581,8 +581,9 @@ int main(int argc, char *argv[]) {
               MPI_INT,
               0,
               MPI_COMM_WORLD);
-      
-        
+      free(neighbor_matrix);
+            free(local_wires);
+
     }
 
     
