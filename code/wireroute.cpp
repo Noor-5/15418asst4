@@ -6,7 +6,9 @@
 #include <chrono>
 #include <string>
 #include <vector>
-#include "mpi.h"
+#include <climits>
+#include <random>
+#include <unistd.h>
 
 #include <mpi.h>
 
@@ -228,8 +230,8 @@ int refOccupancy(int **occupancy , struct Wire route, int dim_x, int dim_y, int 
 
 // Credit: https://stackoverflow.com/questions/5901476/sending-and-receiving-2d-array-over-mpi
 int **alloc_2d_int(int rows, int cols) {
-    int *data = (int *)malloc(rows*cols*sizeof(int));
-    int **array= (int **)malloc(rows*sizeof(int*));
+    int *data = (int *)calloc(rows*cols, sizeof(int));
+    int **array= (int **)calloc(rows,sizeof(int*));
     for (int i=0; i<rows; i++)
         array[i] = &(data[cols*i]);
 
@@ -305,7 +307,7 @@ int main(int argc, char *argv[]) {
 
   int dim_x, dim_y, num_wires;
   std::vector<Wire> wires;
-  std::vector<std::vector<int>> occupancy;
+  // std::vector<std::vector<int>> occupancy;
 
   if (pid == 0) {
       std::ifstream fin(input_filename);
@@ -346,7 +348,7 @@ int main(int argc, char *argv[]) {
    // Create MPI data structure to store wires. Ignores to_validate_format function.
    const int nitems = 6;
    int blocklengths[6] = {1, 1, 1, 1, 1, 1};
-   MPI_Datatype types[6] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT}
+   MPI_Datatype types[6] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
    MPI_Aint offsets[6];
    MPI_Datatype mpi_wire_struct;
    offsets[0] = offsetof(struct Wire, start_x);
@@ -365,7 +367,7 @@ int main(int argc, char *argv[]) {
 
   int **occupancy;
   if (pid == 0) {
-    occupancy = alloc_2d_int(dim_y, dim_x) 
+    occupancy = alloc_2d_int(dim_y, dim_x) ;
   }
   int num_batches = (num_wires + batch_size - 1) / batch_size;
 
@@ -384,16 +386,16 @@ int main(int argc, char *argv[]) {
             refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
           }
           
-          continue
+          continue;
       }
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
-      MPI_BCAST(&(occupancy[0][0]),
+      MPI_Bcast(&(occupancy[0][0]),
               dim_x*dim_y,
               MPI_INT,
               0,
               MPI_COMM_WORLD);
-      int *send_counts = calloc(sizeof(int), nproc);
-      int *disp = calloc(sizeof(int) nproc);
+      int *send_counts = (int*)calloc(sizeof(int), nproc);
+      int *disp = (int*)calloc(sizeof(int), nproc);
 
       int i = batch_ind * batch_size;
       int b = 0;
@@ -406,11 +408,11 @@ int main(int argc, char *argv[]) {
       while (b < nproc){
         disp[b] = 0;
         send_counts[b] = 0;
-        b += 1
+        b += 1;
       }
 
-      struct Wire* local_wires = calloc(sizeof(struct Wire), batch_size);
-      MPI_Scatterv(((void*)wires.data() + (batch_ind * batch_size)), 
+      struct Wire* local_wires = (struct Wire* )calloc(sizeof(struct Wire), batch_size);
+      MPI_Scatterv(((void*)(wires.data() + (batch_ind * batch_size))), 
                 send_counts,
                 disp,
                 mpi_wire_struct,
@@ -496,8 +498,58 @@ int main(int argc, char *argv[]) {
 
       }
       for (int w = 0; w < num_local_wires; w++){    
-        refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1,true);
+        refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
       } 
+
+      MPI_Gatherv((void*)local_wires,
+                  send_counts[pid],
+                  mpi_wire_struct,
+                  (void*)(wires.data() + (batch_ind * batch_size)),
+                  send_counts,
+                  disp,
+                  mpi_wire_struct,
+                  0, MPI_COMM_WORLD);
+      free(local_wires);
+      free(send_counts);
+      free(disp);
+      int **neighbor_matrix;
+      if (pid != 0) {
+        MPI_Recv(&neighbor_matrix,
+                 dim_x * dim_y,
+                 MPI_INT,
+                 pid - 1,
+                 0,
+                 MPI_COMM_WORLD,
+                 MPI_STATUS_IGNORE);
+        for (int i = 0; i < dim_y; i ++) {
+          for (int j = 0; j < dim_x; j ++){
+            occupancy[i][j] += neighbor_matrix[i][j];
+          }
+        }
+      }
+      
+
+      MPI_Send(&occupancy,
+               dim_x*dim_y,
+               MPI_INT,
+               (pid + 1) % nproc,
+               0,
+               MPI_COMM_WORLD);
+      if (pid == 0) {
+        MPI_Recv(&neighbor_matrix,
+                dim_x*dim_y,
+                MPI_INT,
+                nproc - 1,
+                0,
+                MPI_COMM_WORLD,
+                MPI_STATUS_IGNORE);
+        for (int i = 0; i < dim_y; i ++) {
+          for (int j = 0; j < dim_x; j ++){
+            occupancy[i][j] += neighbor_matrix[i][j];
+          }
+        }    
+      }
+
       
         
     }
@@ -515,8 +567,17 @@ int main(int argc, char *argv[]) {
 
   if (pid == 0) {
     /* Write wires and occupancy matrix to files */
-    print_stats(occupancy);
-    write_output(wires, num_wires, occupancy, dim_x, dim_y, nproc, input_filename);
+    std::vector<std::vector<int>> vec;
+    for (int i = 0; i < dim_y; ++i) {
+        std::vector<int> row;
+        for (int j = 0; j < dim_x; ++j) {
+            row.push_back(occupancy[i][j]);
+        }
+        vec.push_back(row);
+    }
+
+    print_stats(vec);
+    write_output(wires, num_wires, vec, dim_x, dim_y, nproc, input_filename);
   }
 
   // Cleanup
