@@ -84,7 +84,7 @@ void write_output(const std::vector<Wire>& wires, const int num_wires, const std
 
   out_wires.close();
 }
-int refOccupancy(std::vector<std::vector<int>>& occupancy , struct Wire route, int dim_x, int dim_y, int flag){
+int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int flag){
   // If flag == -1, decrement occupancy along route
   // If flag == 1, increment occupancy along route
   // If flag == 0, calculate cost of adding the route
@@ -226,6 +226,17 @@ int refOccupancy(std::vector<std::vector<int>>& occupancy , struct Wire route, i
 
 }
 
+// Credit: https://stackoverflow.com/questions/5901476/sending-and-receiving-2d-array-over-mpi
+int **alloc_2d_int(int rows, int cols) {
+    int *data = (int *)malloc(rows*cols*sizeof(int));
+    int **array= (int **)malloc(rows*sizeof(int*));
+    for (int i=0; i<rows; i++)
+        array[i] = &(data[cols*i]);
+
+    return array;
+}
+
+
 int main(int argc, char *argv[]) {
   const auto init_start = std::chrono::steady_clock::now();
   int pid;
@@ -306,7 +317,6 @@ int main(int argc, char *argv[]) {
 
       /* Read the grid dimension and wire information from file */
       fin >> dim_x >> dim_y >> num_wires;
-      std::vector<std::vector<int>> occupancy(dim_y, std::vector<int>(dim_x)); 
 
 
       wires.resize(num_wires);
@@ -321,7 +331,6 @@ int main(int argc, char *argv[]) {
 
   if (pid == 0) {
     const double init_time = std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - init_start).count();
-
     std::cout << "Initialization time (sec): " << std::fixed << std::setprecision(10) << init_time << '\n';
   }
 
@@ -350,19 +359,45 @@ int main(int argc, char *argv[]) {
                           &mpi_wire_struct);
    MPI_Type_commit(&mpi_wire_struct);
 
-  //Set up scatterv call.
-   int chunksize = num_wires / nproc;
-   int leftover = num_wires % chunksize;
-   int *send_counts = calloc(sizeof(int), nproc);
-   int *disp = calloc(sizeof(int) nproc);
-   send_counts[0] = chunksize + leftover;
-   disp[0] = 0
-   for (int i = 1; i < nproc; i ++) {
-     send_counts[i] = chunksize;
-     disp[i] = send_counts[i-1];
-   }
-   struct Wire* local_wires = (Wire*)calloc(sizeof(struct Wire), send_counts[pid]);
-   MPI_Scatterv((void*)wires.date(), 
+   
+
+   
+
+  int **occupancy;
+  if (pid == 0) {
+    occupancy = alloc_2d_int(dim_y, dim_x) 
+  }
+  int num_batches = (num_wires + batch_size - 1) / batch_size;
+
+  
+
+  
+
+   for (int timestep = 0; timestep < SA_iters; timestep++){
+    for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
+      MPI_BCAST(&(occupancy[0][0]),
+              dim_x*dim_y,
+              MPI_INT,
+              0,
+              MPI_COMM_WORLD);
+      int *send_counts = calloc(sizeof(int), nproc);
+      int *disp = calloc(sizeof(int) nproc);
+
+      int i = batch_ind * batch_size;
+      int b = 0
+      while (b < nproc && i < num_wires){
+        disp[b] = i;
+        send_counts[b] = std::min(batch_size, num_wires - i);
+        i += batch_size;
+        b += 1;
+      }
+      while (b < nproc){
+        disp[b] = 0
+        send_counts[b] = 0;
+        b += 1
+      }
+
+      MPI_Scatterv(((void*)wires.data() + (batch_ind * batch_size)), 
                 send_counts,
                 disp,
                 mpi_wire_struct,
@@ -370,18 +405,20 @@ int main(int argc, char *argv[]) {
                 send_counts[pid],
                 mpi_wire_struct,
                 0, MPI_COMM_WORLD)
-   int num_local_wires;
-   MPI_Scatter((void*)send_counts,
+      int num_local_wires;
+      MPI_Scatter((void*)send_counts,
                 nproc,
                 MPI_INT,
                 &num_local_wires,
                 1,
                 MPI_INT,
                 0,
-                MPI_COMM_WORLD)
+                MPI_COMM_WORLD);
+      
+        
+    }
 
-   for (int timestep = 0; timestep < SA_iters; timestep++){
-     occ = vec2matrix(occupancy, dim_x, dim_y);
+    
     if(timestep == 0){
         for(int wireIndex = 0; wireIndex < num_local_wires; wireIndex++)
           {
@@ -389,7 +426,7 @@ int main(int argc, char *argv[]) {
             currWire.bend1_x = currWire.start_x;
             currWire.bend1_y = currWire.end_y;
             local_wires[wireIndex] = currWire;
-            refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1,false);
+            refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
           }
     }
     else {
