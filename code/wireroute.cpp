@@ -526,9 +526,9 @@ int main(int argc, char *argv[]) {
         }
 
       }
-      for (int w = 0; w < num_local_wires; w++){    
-        refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
-      } 
+      // for (int w = 0; w < num_local_wires; w++){    
+      //   refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
+      // } 
 
 
       MPI_Gatherv((void*)local_wires,
@@ -539,50 +539,62 @@ int main(int argc, char *argv[]) {
                   disp,
                   mpi_wire_struct,
                   0, MPI_COMM_WORLD);
-      free(send_counts);
+      // free(send_counts);
       free(disp);
 
-      int *neighbor_matrix = (int*)calloc(sizeof(int), dim_x*dim_y);
-      if (pid != 0) {
-        MPI_Recv(neighbor_matrix,
-                 dim_x * dim_y,
-                 MPI_INT,
-                 pid - 1,
-                 0,
-                 MPI_COMM_WORLD,
-                 MPI_STATUS_IGNORE);
-        for (int i = 0; i < dim_x * dim_y; i ++) {
-          occupancy[i] += neighbor_matrix[i];
+      if (pid == 0) {
+        int wire_tot = 0;
+        for (int i = 0; i < nproc; i ++){
+          printf("send count %d\n",send_counts[i] );
+          wire_tot += send_counts[i];
+        }
+        for (int i = batch_ind * batch_size; i < (batch_ind * batch_size) + wire_tot; i ++){
+          refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
         }
       }
+      free(send_counts);
+
+      // int *neighbor_matrix = (int*)calloc(sizeof(int), dim_x*dim_y);
+      // if (pid != 0) {
+      //   MPI_Recv(neighbor_matrix,
+      //            dim_x * dim_y,
+      //            MPI_INT,
+      //            pid - 1,
+      //            0,
+      //            MPI_COMM_WORLD,
+      //            MPI_STATUS_IGNORE);
+      //   for (int i = 0; i < dim_x * dim_y; i ++) {
+      //     occupancy[i] += neighbor_matrix[i];
+      //   }
+      // }
       
-      MPI_Send(occupancy,
-               dim_x*dim_y,
-               MPI_INT,
-               (pid + 1) % nproc,
-               0,
-               MPI_COMM_WORLD);
-      if (pid == 0) {
-        MPI_Recv(neighbor_matrix,
-                dim_x*dim_y,
-                MPI_INT,
-                nproc - 1,
-                0,
-                MPI_COMM_WORLD,
-                MPI_STATUS_IGNORE);
-        for (int i = 0; i < dim_x*dim_y; i ++) {
-          occupancy[i] += neighbor_matrix[i];
+      // MPI_Send(occupancy,
+      //          dim_x*dim_y,
+      //          MPI_INT,
+      //          (pid + 1) % nproc,
+      //          0,
+      //          MPI_COMM_WORLD);
+      // if (pid == 0) {
+      //   MPI_Recv(neighbor_matrix,
+      //           dim_x*dim_y,
+      //           MPI_INT,
+      //           nproc - 1,
+      //           0,
+      //           MPI_COMM_WORLD,
+      //           MPI_STATUS_IGNORE);
+      //   for (int i = 0; i < dim_x*dim_y; i ++) {
+      //     occupancy[i] += neighbor_matrix[i];
           
-        }    
-      }
+      //   }    
+      // }
       MPI_Barrier(MPI_COMM_WORLD);
       MPI_Bcast(occupancy,
               dim_x*dim_y,
               MPI_INT,
               0,
               MPI_COMM_WORLD);
-      free(neighbor_matrix);
-            free(local_wires);
+      // free(neighbor_matrix);
+      free(local_wires);
 
     }
 
@@ -607,11 +619,12 @@ int main(int argc, char *argv[]) {
         }
         vec.push_back(row);
     }
-    free(occupancy);
+    
 
     print_stats(vec);
     write_output(wires, num_wires, vec, dim_x, dim_y, nproc, input_filename);
   }
+  free(occupancy);
 
   // Cleanup
   MPI_Finalize();
