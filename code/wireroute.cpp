@@ -108,7 +108,9 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
     bend2_y = end_y;
   }
   else {
+
     printf("Should not have got here!\n");
+    printf("bend1_x = %d, start_x = %d, bend1_y = %d, start_y = %d\n", bend1_x,start_x,bend1_y,start_y);
     return -109823498;
   }
 
@@ -309,7 +311,7 @@ int main(int argc, char *argv[]) {
   std::vector<Wire> wires;
   // std::vector<std::vector<int>> occupancy;
 
-  if (pid == 0) {
+  // if (pid == 0) {
       std::ifstream fin(input_filename);
 
       if (!fin) {
@@ -327,7 +329,7 @@ int main(int argc, char *argv[]) {
         wire.bend1_x = wire.start_x;
         wire.bend1_y = wire.start_y;
       }
-  }
+  // }
 
   /* Initialize any additional data structures needed in the algorithm */
 
@@ -346,78 +348,46 @@ int main(int argc, char *argv[]) {
    */
 
    // Create MPI data structure to store wires. Ignores to_validate_format function.
-   const int nitems = 6;
-   int blocklengths[6] = {1, 1, 1, 1, 1, 1};
-   MPI_Datatype types[6] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
-   MPI_Aint offsets[6];
-   MPI_Datatype mpi_wire_struct;
-   offsets[0] = offsetof(struct Wire, start_x);
-   offsets[1] = offsetof(struct Wire, start_y);
-   offsets[2] = offsetof(struct Wire, end_x);
-   offsets[3] = offsetof(struct Wire, end_y);
-   offsets[4] = offsetof(struct Wire, bend1_x);
-   offsets[5] = offsetof(struct Wire, bend1_y);
-   MPI_Type_create_struct(nitems, blocklengths, offsets, types,
-                          &mpi_wire_struct);
-   MPI_Type_commit(&mpi_wire_struct);
+  //  const int nitems = 6;
+  //  int blocklengths[6] = {1, 1, 1, 1, 1, 1};
+  //  MPI_Datatype types[6] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT, MPI_INT};
+  //  MPI_Aint offsets[6];
+  //  MPI_Datatype mpi_wire_struct;
+  //  offsets[0] = offsetof(struct Wire, start_x);
+  //  offsets[1] = offsetof(struct Wire, start_y);
+  //  offsets[2] = offsetof(struct Wire, end_x);
+  //  offsets[3] = offsetof(struct Wire, end_y);
+  //  offsets[4] = offsetof(struct Wire, bend1_x);
+  //  offsets[5] = offsetof(struct Wire, bend1_y);
+  //  MPI_Type_create_struct(nitems, blocklengths, offsets, types,
+  //                         &mpi_wire_struct);
+  //  MPI_Type_commit(&mpi_wire_struct);
 
    
    
 
   int *occupancy;
-  int num_batches;
-  if (pid == 0) {
-    occupancy = (int*)calloc(sizeof(int), (dim_x*dim_y));
-    num_batches = (num_wires + batch_size - 1) / batch_size;
-  }
+
+  occupancy = (int*)calloc(sizeof(int), (dim_x*dim_y));
+  int num_batches = (num_wires + batch_size - 1) / batch_size;
+
 
   
   // printf("num batches = %d \n", num_batches);
 
-  if(pid == 0){
-          for(int wireIndex = 0; wireIndex < num_wires; wireIndex++)
-          {
-            struct Wire currWire = wires[wireIndex];
-            refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
-          }
-          
-      }
-  
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Bcast(&dim_x,
-              1,
-              MPI_INT,
-              0, 
-              MPI_COMM_WORLD);
-  MPI_Bcast(&dim_y,
-              1,
-              MPI_INT,
-              0, 
-              MPI_COMM_WORLD);
-  MPI_Bcast(&num_wires,
-              1,
-              MPI_INT,
-              0, 
-              MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-  if (pid != 0) {
-    occupancy = (int*)calloc(sizeof(int), dim_x*dim_y);
+  for(int wireIndex = 0; wireIndex < num_wires; wireIndex++)
+  {
+    struct Wire currWire = wires[wireIndex];
+    currWire.bend1_x = currWire.start_x;
+    currWire.bend1_y = currWire.end_y;
+    wires[wireIndex] = currWire;
+    refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
   }
-  MPI_Bcast((void*)occupancy,
-              (dim_x*dim_y),
-              MPI_INT,
-              0,
-              MPI_COMM_WORLD);
-  MPI_Bcast((void*)&num_batches,
-              1,
-              MPI_INT,
-              0,
-              MPI_COMM_WORLD);
-
-  
+          
+      
+    
 
    for (int timestep = 1; timestep < SA_iters; timestep++){
-    //  printf("TEST TEST TEST? \n");
     
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
       // printf("batch = %d\n", batch_ind);
@@ -427,7 +397,7 @@ int main(int argc, char *argv[]) {
       int i = batch_ind * batch_size;
       int b = 0;
       while (b < nproc && i < num_wires){
-        disp[b] = i;
+        disp[b] = i * 2;
         send_counts[b] = std::min(batch_size, num_wires - i);
         i += batch_size;
         b += 1;
@@ -437,17 +407,17 @@ int main(int argc, char *argv[]) {
         send_counts[b] = 0;
         b += 1;
       }
-      // printf("pre scatter1\n");
-      struct Wire* local_wires = (struct Wire* )calloc(sizeof(struct Wire), batch_size);
-      MPI_Scatterv(((void*)(wires.data() + (batch_ind * batch_size))), 
-                send_counts,
-                disp,
-                mpi_wire_struct,
-                (void*)local_wires,
-                send_counts[pid],
-                mpi_wire_struct,
-                0, MPI_COMM_WORLD);
+      struct Wire* local_wires = (struct Wire *)calloc(sizeof(struct Wire), batch_size);
+      // MPI_Scatterv(((void*)(wires.data() + (batch_ind * batch_size))), 
+      //           send_counts,
+      //           disp,
+      //           mpi_wire_struct,
+      //           (void*)local_wires,
+      //           send_counts[pid],
+      //           mpi_wire_struct,
+      //           0, MPI_COMM_WORLD);
       int num_local_wires = send_counts[pid];
+      // printf("NUM LOCA WIRES %d\n", num_local_wires);
       // printf("num local wires = %d \n", num_local_wires);
       // MPI_Scatter((void*)send_counts,
       //           nproc,
@@ -459,7 +429,7 @@ int main(int argc, char *argv[]) {
       //           MPI_COMM_WORLD);
       // printf("working til here\n");
       for (int wireIndex = 0; wireIndex < num_local_wires; wireIndex ++ ){
-        struct Wire currWire = local_wires[wireIndex];
+        struct Wire currWire = wires[wireIndex];
         int xi, yi, xf, yf;
         xi = currWire.start_x;
         yi = currWire.start_y;
@@ -529,30 +499,65 @@ int main(int argc, char *argv[]) {
       // for (int w = 0; w < num_local_wires; w++){    
       //   refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
       // } 
+      int *best_bends = (int*)calloc(sizeof(int), batch_size*2);
+      for (int i = 0; i < num_local_wires; i ++) {
+        best_bends[2*i] = local_wires[i].bend1_x;
+        best_bends[2*i+1] = local_wires[i].bend1_y;
+      }
+
+      int wire_tot = 0;
+      int *recv_counts = (int*)calloc(sizeof(int), nproc);
+      for (int i = 0; i < nproc; i ++){
+        wire_tot += send_counts[i];
+        recv_counts[i] = 2*send_counts[i];
+      }
+      int *recv_all = (int*)calloc(sizeof(int), wire_tot*2);
+      
+      MPI_Allgatherv(best_bends,
+                    num_local_wires * 2,
+                    MPI_INT,
+                    recv_all,
+                    recv_counts,
+                    disp,
+                    MPI_INT,
+                    MPI_COMM_WORLD);
 
 
-      MPI_Gatherv((void*)local_wires,
-                  send_counts[pid],
-                  mpi_wire_struct,
-                  (void*)(wires.data() + (batch_ind * batch_size)),
-                  send_counts,
-                  disp,
-                  mpi_wire_struct,
-                  0, MPI_COMM_WORLD);
+      // MPI_Gatherv((void*)local_wires,
+      //             send_counts[pid],
+      //             mpi_wire_struct,
+      //             (void*)(wires.data() + (batch_ind * batch_size)),
+      //             send_counts,
+      //             disp,
+      //             mpi_wire_struct,
+      //             0, MPI_COMM_WORLD);
       // free(send_counts);
+      free(recv_counts);
       free(disp);
+      free(best_bends);
 
       if (pid == 0) {
-        int wire_tot = 0;
-        for (int i = 0; i < nproc; i ++){
-          printf("send count %d\n",send_counts[i] );
-          wire_tot += send_counts[i];
+        for (int i = (batch_ind * batch_size) + send_counts[0]; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
+          refOccupancy(occupancy, wires[i], dim_x, dim_y, -1);
         }
-        for (int i = batch_ind * batch_size; i < (batch_ind * batch_size) + wire_tot; i ++){
+      }
+
+      for (int i = batch_size * batch_ind; i < (batch_size * batch_ind) + wire_tot; i ++) {
+        struct Wire cur_wire = wires[i];
+        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind))];
+        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind)) + 1];
+        wires[i] = cur_wire;
+      }
+
+      if (pid == 0) {
+        // printf("%d, %d\n", batch_ind * batch_size, num_wires);
+        for (int i = batch_ind * batch_size; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
+          // printf("i = %d, loop guard = %d\n", i, std::min(num_wires,(batch_ind * batch_size) + wire_tot));
           refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
         }
       }
       free(send_counts);
+      free(recv_all);
 
       // int *neighbor_matrix = (int*)calloc(sizeof(int), dim_x*dim_y);
       // if (pid != 0) {
