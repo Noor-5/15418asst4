@@ -510,6 +510,7 @@ int main(int argc, char *argv[]) {
 
       free(recv_all);
       free(local_wires);
+      MPI_Barrier(MPI_COMM_WORLD);
 
     }
 
