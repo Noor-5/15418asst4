@@ -107,8 +107,7 @@ int refOccupancy(std::vector<std::vector<int>>&occupancy , struct Wire route, in
   }
   else {
 
-   printf("Should not have got here!\n");
-    //printf("bend1_x = %d, start_x = %d, bend1_y = %d, start_y = %d\n", bend1_x,start_x,bend1_y,start_y);
+    printf("bend1_x = %d, start_x = %d, bend1_y = %d, start_y = %d\n", bend1_x,start_x,bend1_y,start_y);
     return -109823498;
   }
 
@@ -446,6 +445,7 @@ int main(int argc, char *argv[]) {
         yi = currWire.start_y;
         xf = currWire.end_x;
         yf = currWire.end_y;
+         
         int delta_x = std::abs(xf - xi);
         int delta_y = std::abs(yf - yi);
         if(delta_x != 0 && delta_y != 0 ){
@@ -578,47 +578,6 @@ int main(int argc, char *argv[]) {
       //}
       // free(send_counts);
       free(recv_all);
-
-      // int *neighbor_matrix = (int*)calloc(sizeof(int), dim_x*dim_y);
-      // if (pid != 0) {
-      //   MPI_Recv(neighbor_matrix,
-      //            dim_x * dim_y,
-      //            MPI_INT,
-      //            pid - 1,
-      //            0,
-      //            MPI_COMM_WORLD,
-      //            MPI_STATUS_IGNORE);
-      //   for (int i = 0; i < dim_x * dim_y; i ++) {
-      //     occupancy[i] += neighbor_matrix[i];
-      //   }
-      // }
-      
-      // MPI_Send(occupancy,
-      //          dim_x*dim_y,
-      //          MPI_INT,
-      //          (pid + 1) % nproc,
-      //          0,
-      //          MPI_COMM_WORLD);
-      // if (pid == 0) {
-      //   MPI_Recv(neighbor_matrix,
-      //           dim_x*dim_y,
-      //           MPI_INT,
-      //           nproc - 1,
-      //           0,
-      //           MPI_COMM_WORLD,
-      //           MPI_STATUS_IGNORE);
-      //   for (int i = 0; i < dim_x*dim_y; i ++) {
-      //     occupancy[i] += neighbor_matrix[i];
-          
-      //   }    
-      // }
-      // MPI_Barrier(MPI_COMM_WORLD);
-      // MPI_Bcast(occupancy,
-      //         dim_x*dim_y,
-      //         MPI_INT,
-      //         0,
-      //         MPI_COMM_WORLD);
-      // // free(neighbor_matrix);
       free(local_wires);
 
     }
