@@ -9,9 +9,7 @@
 #include <climits>
 #include <random>
 #include <unistd.h>
-
 #include <mpi.h>
-
 #include "wireroute.h"
 
 void print_stats(const std::vector<std::vector<int>>& occupancy) {
@@ -109,8 +107,8 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   }
   else {
 
-    printf("Should not have got here!\n");
-    printf("bend1_x = %d, start_x = %d, bend1_y = %d, start_y = %d\n", bend1_x,start_x,bend1_y,start_y);
+   // printf("Should not have got here!\n");
+    //printf("bend1_x = %d, start_x = %d, bend1_y = %d, start_y = %d\n", bend1_x,start_x,bend1_y,start_y);
     return -109823498;
   }
 
@@ -255,9 +253,9 @@ int main(int argc, char *argv[]) {
 
   std::string input_filename;
   double SA_prob = 0.1;
-  int SA_iters = 5;
+  int SA_iters = 2;
   char parallel_mode = '\0';
-  int batch_size = 1;
+  int batch_size = 16;
 
   // Read command line arguments
   int opt;
@@ -368,13 +366,14 @@ int main(int argc, char *argv[]) {
 
   int *occupancy;
 
-  occupancy = (int*)calloc(sizeof(int), (dim_x*dim_y));
+  occupancy = (int*)malloc(sizeof(int)* (dim_x*dim_y));
   int num_batches = (num_wires + batch_size - 1) / batch_size;
 
 
   
   // printf("num batches = %d \n", num_batches);
 
+  //initialze all wires by writing to occupancy matrix (all processors)
   for(int wireIndex = 0; wireIndex < num_wires; wireIndex++)
   {
     struct Wire currWire = wires[wireIndex];
@@ -391,8 +390,8 @@ int main(int argc, char *argv[]) {
     
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
       // printf("batch = %d\n", batch_ind);
-      int *send_counts = (int*)calloc(sizeof(int), nproc);
-      int *disp = (int*)calloc(sizeof(int), nproc);
+      int *send_counts = (int*)malloc(sizeof(int)* nproc);
+      int *disp = (int*)malloc(sizeof(int)* nproc);
 
       int i = batch_ind * batch_size;
       int b = 0;
@@ -402,12 +401,13 @@ int main(int argc, char *argv[]) {
         i += batch_size;
         b += 1;
       }
+      //leftover processors do do nothing
       while (b < nproc){
         disp[b] = 0;
         send_counts[b] = 0;
         b += 1;
       }
-      struct Wire* local_wires = (struct Wire *)calloc(sizeof(struct Wire), batch_size);
+      struct Wire* local_wires = (struct Wire *)malloc(sizeof(struct Wire)* batch_size);
       // MPI_Scatterv(((void*)(wires.data() + (batch_ind * batch_size))), 
       //           send_counts,
       //           disp,
@@ -416,6 +416,7 @@ int main(int argc, char *argv[]) {
       //           send_counts[pid],
       //           mpi_wire_struct,
       //           0, MPI_COMM_WORLD);
+      //number of wires that a processor works on
       int num_local_wires = send_counts[pid];
       // printf("NUM LOCA WIRES %d\n", num_local_wires);
       // printf("num local wires = %d \n", num_local_wires);
@@ -428,6 +429,7 @@ int main(int argc, char *argv[]) {
       //           0,
       //           MPI_COMM_WORLD);
       // printf("working til here\n");
+      //batch_ind * nproc*batch_size + pid*batch_size
       for (int wireIndex = 0; wireIndex < num_local_wires; wireIndex ++ ){
         struct Wire currWire = wires[wireIndex];
         int xi, yi, xf, yf;
@@ -493,25 +495,27 @@ int main(int argc, char *argv[]) {
             local_wires[wireIndex] = best_route;
           }
           free(possRoutes);
+          refOccupancy(occupancy,currWire,dim_x,dim_y, 1); //added 
+
         }
 
       }
       // for (int w = 0; w < num_local_wires; w++){    
       //   refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
       // } 
-      int *best_bends = (int*)calloc(sizeof(int), batch_size*2);
+      int *best_bends = (int*)malloc(sizeof(int)* batch_size*2);
       for (int i = 0; i < num_local_wires; i ++) {
         best_bends[2*i] = local_wires[i].bend1_x;
         best_bends[2*i+1] = local_wires[i].bend1_y;
       }
 
       int wire_tot = 0;
-      int *recv_counts = (int*)calloc(sizeof(int), nproc);
+      int *recv_counts = (int*)malloc(sizeof(int)* nproc);
       for (int i = 0; i < nproc; i ++){
         wire_tot += send_counts[i];
         recv_counts[i] = 2*send_counts[i];
       }
-      int *recv_all = (int*)calloc(sizeof(int), wire_tot*2);
+      int *recv_all = (int*)malloc(sizeof(int)* wire_tot*2);
       
       MPI_Allgatherv(best_bends,
                     num_local_wires * 2,
@@ -531,31 +535,32 @@ int main(int argc, char *argv[]) {
       //             disp,
       //             mpi_wire_struct,
       //             0, MPI_COMM_WORLD);
-      // free(send_counts);
+      //free(send_counts);
       free(recv_counts);
       free(disp);
       free(best_bends);
 
-      if (pid == 0) {
-        for (int i = (batch_ind * batch_size) + send_counts[0]; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
+      //all processors update their occupancy matrix
+        for (int i = (batch_ind * batch_size*nproc); i < std::min(num_wires,(batch_ind * batch_size*nproc) + wire_tot); i ++){
+          
           refOccupancy(occupancy, wires[i], dim_x, dim_y, -1);
         }
-      }
+      
 
-      for (int i = batch_size * batch_ind; i < (batch_size * batch_ind) + wire_tot; i ++) {
+      for (int i = batch_size * batch_ind*nproc; i < (batch_size * batch_ind*nproc) + wire_tot; i ++) {
         struct Wire cur_wire = wires[i];
-        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind))];
-        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind)) + 1];
+        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind*nproc))];
+        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind*nproc)) + 1];
         wires[i] = cur_wire;
       }
 
-      if (pid == 0) {
+      // if (pid == 0) {
         // printf("%d, %d\n", batch_ind * batch_size, num_wires);
-        for (int i = batch_ind * batch_size; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
+        for (int i = batch_ind * batch_size*nproc; i < std::min(num_wires,(batch_ind * batch_size*nproc) + wire_tot); i ++){
           // printf("i = %d, loop guard = %d\n", i, std::min(num_wires,(batch_ind * batch_size) + wire_tot));
           refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
         }
-      }
+      //}
       free(send_counts);
       free(recv_all);
 
