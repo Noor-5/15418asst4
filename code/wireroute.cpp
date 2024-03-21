@@ -510,7 +510,6 @@ int main(int argc, char *argv[]) {
 
       free(recv_all);
       free(local_wires);
-      MPI_Barrier(MPI_COMM_WORLD);
 
     }
 
@@ -526,22 +525,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (pid == 0) {
-    /* Write wires and occupancy matrix to files */
-    // std::vector<std::vector<int>> vec;
-    // for (int i = 0; i < dim_y; ++i) {
-    //     std::vector<int> row;
-    //     for (int j = 0; j < dim_x; ++j) {
-    //         row.push_back(occupancy[i * dim_x + j]);
-    //     }
-    //     vec.push_back(row);
-    // }
     
 
     print_stats(occupancy);
     write_output(wires, num_wires, occupancy, dim_x, dim_y, nproc, input_filename);
   }
-  // free(occupancy);
 
-  // Cleanup
   MPI_Finalize();
 }
