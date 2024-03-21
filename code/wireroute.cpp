@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
 
   std::string input_filename;
   double SA_prob = 0.1;
-  int SA_iters = 2;
+  int SA_iters = 5;
   char parallel_mode = '\0';
   int batch_size = 16;
 
@@ -505,7 +505,7 @@ int main(int argc, char *argv[]) {
             local_wires[wireIndex - start] = best_route;
           }
           free(possRoutes);
-          refOccupancy(occupancy,currWire,dim_x,dim_y, 1); //added 
+          refOccupancy(occupancy,wires[wireIndex],dim_x,dim_y, 1); //added 
 
         }
         else{
@@ -579,6 +579,7 @@ int main(int argc, char *argv[]) {
       // free(send_counts);
       free(recv_all);
       free(local_wires);
+      MPI_Barrier(MPI_COMM_WORLD);
 
     }
 
