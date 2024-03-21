@@ -428,7 +428,8 @@ int main(int argc, char *argv[]) {
       //           0,
       //           MPI_COMM_WORLD);
       // printf("working til here\n");
-      for (int wireIndex = 0; wireIndex < num_local_wires; wireIndex ++ ){
+      int start = (batch_ind + pid) * batch_size;
+      for (int wireIndex = start; wireIndex < start + num_local_wires; wireIndex ++ ){
         struct Wire currWire = wires[wireIndex];
         int xi, yi, xf, yf;
         xi = currWire.start_x;
@@ -553,7 +554,10 @@ int main(int argc, char *argv[]) {
         // printf("%d, %d\n", batch_ind * batch_size, num_wires);
         for (int i = batch_ind * batch_size; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
           // printf("i = %d, loop guard = %d\n", i, std::min(num_wires,(batch_ind * batch_size) + wire_tot));
-          refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
+          int res = refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
+          if (res == -109823498 ){
+            printf("failed here\n");
+          }
         }
       }
       free(send_counts);
