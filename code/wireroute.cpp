@@ -84,7 +84,7 @@ void write_output(const std::vector<Wire>& wires, const int num_wires, const std
 
   out_wires.close();
 }
-int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int flag){
+int refOccupancy(std::vector<std::vector<int>>& occupancy , struct Wire route, int dim_x, int dim_y, int flag){
   // If flag == -1, decrement occupancy along route
   // If flag == 1, increment occupancy along route
   // If flag == 0, calculate cost of adding the route
@@ -363,10 +363,11 @@ int main(int argc, char *argv[]) {
 
    
    
+    std::vector<std::vector<int>> occupancy(dim_y, std::vector<int>(dim_x)); 
 
-  int *occupancy;
+  // int *occupancy;
 
-  occupancy = (int*)malloc(sizeof(int)* (dim_x*dim_y));
+  // occupancy = (int*)malloc(sizeof(int)* (dim_x*dim_y));
   int num_batches = (num_wires + batch_size - 1) / batch_size;
 
 
@@ -429,8 +430,8 @@ int main(int argc, char *argv[]) {
       //           0,
       //           MPI_COMM_WORLD);
       // printf("working til here\n");
-      //batch_ind * nproc*batch_size + pid*batch_size
-      for (int wireIndex = 0; wireIndex < num_local_wires; wireIndex ++ ){
+      int start = batch_ind *batch_size + pid*batch_size;
+      for (int wireIndex = start; wireIndex < num_local_wires; wireIndex ++ ){
         struct Wire currWire = wires[wireIndex];
         int xi, yi, xf, yf;
         xi = currWire.start_x;
@@ -547,7 +548,7 @@ int main(int argc, char *argv[]) {
         }
       
 
-      for (int i = batch_size * batch_ind*nproc; i < (batch_size * batch_ind*nproc) + wire_tot; i ++) {
+      for (int i = batch_size * batch_ind; i < (batch_size * batch_ind) + wire_tot; i ++) {
         struct Wire cur_wire = wires[i];
         cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind*nproc))];
         cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind*nproc)) + 1];
@@ -598,11 +599,11 @@ int main(int argc, char *argv[]) {
       //   }    
       // }
       MPI_Barrier(MPI_COMM_WORLD);
-      MPI_Bcast(occupancy,
-              dim_x*dim_y,
-              MPI_INT,
-              0,
-              MPI_COMM_WORLD);
+      // MPI_Bcast(occupancy,
+      //         dim_x*dim_y,
+      //         MPI_INT,
+      //         0,
+      //         MPI_COMM_WORLD);
       // free(neighbor_matrix);
       free(local_wires);
 
@@ -634,7 +635,7 @@ int main(int argc, char *argv[]) {
     print_stats(vec);
     write_output(wires, num_wires, vec, dim_x, dim_y, nproc, input_filename);
   }
-  free(occupancy);
+  //free(occupancy);
 
   // Cleanup
   MPI_Finalize();
