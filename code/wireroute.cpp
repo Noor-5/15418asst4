@@ -550,14 +550,14 @@ int main(int argc, char *argv[]) {
 
       for (int i = batch_size * batch_ind; i < (batch_size * batch_ind) + wire_tot; i ++) {
         struct Wire cur_wire = wires[i];
-        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind*nproc))];
-        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind*nproc)) + 1];
+        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind))];
+        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind)) + 1];
         wires[i] = cur_wire;
       }
 
       // if (pid == 0) {
         // printf("%d, %d\n", batch_ind * batch_size, num_wires);
-        for (int i = batch_ind * batch_size*nproc; i < std::min(num_wires,(batch_ind * batch_size*nproc) + wire_tot); i ++){
+        for (int i = batch_ind * batch_size; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
           // printf("i = %d, loop guard = %d\n", i, std::min(num_wires,(batch_ind * batch_size) + wire_tot));
           refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
         }
