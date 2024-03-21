@@ -84,7 +84,7 @@ void write_output(const std::vector<Wire>& wires, const int num_wires, const std
 
   out_wires.close();
 }
-int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int flag){
+int refOccupancy(std::vector<std::vector<int>>&occupancy , struct Wire route, int dim_x, int dim_y, int flag){
   // If flag == -1, decrement occupancy along route
   // If flag == 1, increment occupancy along route
   // If flag == 0, calculate cost of adding the route
@@ -107,7 +107,7 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   }
   else {
 
-   // printf("Should not have got here!\n");
+   printf("Should not have got here!\n");
     //printf("bend1_x = %d, start_x = %d, bend1_y = %d, start_y = %d\n", bend1_x,start_x,bend1_y,start_y);
     return -109823498;
   }
@@ -123,10 +123,10 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   }
   for (int i = start_y ; i != bend1_y; i += stepi1){
     if (flag == 0){
-      cost += occupancy[i * dim_x + start_x] + 1;
+      cost += occupancy[i][start_x] + 1;
     }
     else {
-      occupancy[i * dim_x + start_x] += flag;
+      occupancy[i ][start_x] += flag;
     }
   }
   int stepi2 = 1;
@@ -136,10 +136,10 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   }
   for (int i = start_x; i != bend1_x; i += stepi2 ) {
     if (flag == 0){
-      cost += occupancy[start_y * dim_x + i] + 1;
+      cost += occupancy[start_y ][+ i] + 1;
     }
     else {
-      occupancy[start_y * dim_x + i] += flag;
+      occupancy[start_y ][ i] += flag;
     }
   }
 
@@ -153,10 +153,10 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   for (int i = bend1_x; i !=  bend2_x; i += stepi3) {
     
     if (flag == 0){
-      cost += occupancy[bend1_y * dim_x + i] + 1;
+      cost += occupancy[bend1_y ][ + i] + 1;
     }
     else {
-      occupancy[bend1_y * dim_x + i] += flag;
+      occupancy[bend1_y ][ i] += flag;
     }
   }
 
@@ -169,10 +169,10 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   for (int i = bend1_y; i !=  bend2_y; i += stepi4) {
     
     if (flag == 0){
-      cost += occupancy[i * dim_x + bend1_x] + 1;
+      cost += occupancy[i ][ bend1_x] + 1;
     }
     else {
-      occupancy[i * dim_x + bend1_x] += flag;
+      occupancy[i ][ bend1_x] += flag;
     }
   }
 
@@ -186,11 +186,11 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   // BEND 2 TO END
   for (int i = bend2_x ; i != end_x; i += stepi5) {
     if (flag == 0){
-      cost += occupancy[end_y * dim_x + i] + 1;
+      cost += occupancy[end_y][ i] + 1;
     }
     else {
     
-      occupancy[end_y * dim_x + i] += flag;
+      occupancy[end_y ][ i] += flag;
       
       
     }
@@ -204,11 +204,11 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
   for (int i = bend2_y; i !=  end_y; i +=stepi6) {
     
     if (flag == 0){
-      cost += occupancy[i * dim_x + end_x] + 1;
+      cost += occupancy[i ][ end_x] + 1;
     }
     else {
 
-        occupancy[i * dim_x + end_x] += flag; 
+        occupancy[i ][ end_x] += flag; 
       
       
     }
@@ -216,11 +216,11 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
 
   // INCLUDE END POINT
   if (flag == 0){
-      cost += occupancy[end_y * dim_x + end_x] + 1;
+      cost += occupancy[end_y ][ end_x] + 1;
     }
   else {
    
-    occupancy[end_y * dim_x + end_x] += flag;
+    occupancy[end_y ][end_x] += flag;
     
     
   }
@@ -228,15 +228,15 @@ int refOccupancy(int *occupancy , struct Wire route, int dim_x, int dim_y, int f
 
 }
 
-// Credit: https://stackoverflow.com/questions/5901476/sending-and-receiving-2d-array-over-mpi
-int **alloc_2d_int(int rows, int cols) {
-    int *data = (int *)calloc(rows*cols, sizeof(int));
-    int **array= (int **)calloc(rows,sizeof(int*));
-    for (int i=0; i<rows; i++)
-        array[i] = &(data[cols*i]);
+// // Credit: https://stackoverflow.com/questions/5901476/sending-and-receiving-2d-array-over-mpi
+// int **alloc_2d_int(int rows, int cols) {
+//     int *data = (int *)calloc(rows*cols, sizeof(int));
+//     int **array= (int **)calloc(rows,sizeof(int*));
+//     for (int i=0; i<rows; i++)
+//         array[i] = &(data[cols*i]);
 
-    return array;
-}
+//     return array;
+// }
 
 
 int main(int argc, char *argv[]) {
@@ -306,7 +306,7 @@ int main(int argc, char *argv[]) {
   }
 
   int dim_x, dim_y, num_wires;
-  std::vector<Wire> wires;
+  // std::vector<Wire> wires;
   // std::vector<std::vector<int>> occupancy;
 
   // if (pid == 0) {
@@ -320,13 +320,17 @@ int main(int argc, char *argv[]) {
       /* Read the grid dimension and wire information from file */
       fin >> dim_x >> dim_y >> num_wires;
 
+      std::vector<Wire> wires(num_wires);
+       //Changed this line below (bugs)
+      std::vector<std::vector<int>> occupancy(dim_y, std::vector<int>(dim_x)); 
 
-      wires.resize(num_wires);
-      for (auto& wire : wires) {
-        fin >> wire.start_x >> wire.start_y >> wire.end_x >> wire.end_y;
-        wire.bend1_x = wire.start_x;
-        wire.bend1_y = wire.start_y;
-      }
+  for (auto& wire : wires) {
+    fin >> wire.start_x >> wire.start_y >> wire.end_x >> wire.end_y;
+    wire.bend1_x = wire.start_x;
+    wire.bend1_y = wire.start_y;
+  }
+
+      
   // }
 
   /* Initialize any additional data structures needed in the algorithm */
@@ -364,9 +368,9 @@ int main(int argc, char *argv[]) {
    
    
 
-  int *occupancy;
+  // int *occupancy;
 
-  occupancy = (int*)malloc(sizeof(int)* (dim_x*dim_y));
+  // occupancy = (int*)malloc(sizeof(int)* (dim_x*dim_y));
   int num_batches = (num_wires + batch_size - 1) / batch_size;
 
 
@@ -382,6 +386,7 @@ int main(int argc, char *argv[]) {
     wires[wireIndex] = currWire;
     refOccupancy(occupancy, currWire,  dim_x,  dim_y, 1);
   }
+  // printf("%d %d \n", wires[2].start_y, wires[2].end_y);
           
       
     
@@ -390,24 +395,26 @@ int main(int argc, char *argv[]) {
     
     for (int batch_ind = 0; batch_ind < num_batches; batch_ind += nproc){
       // printf("batch = %d\n", batch_ind);
-      int *send_counts = (int*)malloc(sizeof(int)* nproc);
-      int *disp = (int*)malloc(sizeof(int)* nproc);
+      int send_counts[nproc];
+      int disp[nproc];
 
       int i = batch_ind * batch_size;
       int b = 0;
       while (b < nproc && i < num_wires){
-        disp[b] = i * 2;
+        // if (pid == 0) printf("for b %d , i is %d\n", b, i);
+        disp[b] = (i - batch_ind * batch_size) * 2;
         send_counts[b] = std::min(batch_size, num_wires - i);
         i += batch_size;
         b += 1;
       }
       //leftover processors do do nothing
       while (b < nproc){
+        // if (pid == 0) printf("hello\n");
         disp[b] = 0;
         send_counts[b] = 0;
         b += 1;
       }
-      struct Wire* local_wires = (struct Wire *)malloc(sizeof(struct Wire)* batch_size);
+      struct Wire* local_wires = (struct Wire *)malloc(sizeof(struct Wire) * batch_size);
       // MPI_Scatterv(((void*)(wires.data() + (batch_ind * batch_size))), 
       //           send_counts,
       //           disp,
@@ -418,6 +425,7 @@ int main(int argc, char *argv[]) {
       //           0, MPI_COMM_WORLD);
       //number of wires that a processor works on
       int num_local_wires = send_counts[pid];
+      // if (pid == 1) printf("%d\n", num_local_wires);
       // printf("NUM LOCA WIRES %d\n", num_local_wires);
       // printf("num local wires = %d \n", num_local_wires);
       // MPI_Scatter((void*)send_counts,
@@ -431,12 +439,14 @@ int main(int argc, char *argv[]) {
       // printf("working til here\n");
       int start = (batch_ind + pid) * batch_size;
       for (int wireIndex = start; wireIndex < start + num_local_wires; wireIndex ++ ){
+       
         struct Wire currWire = wires[wireIndex];
         int xi, yi, xf, yf;
         xi = currWire.start_x;
         yi = currWire.start_y;
         xf = currWire.end_x;
         yf = currWire.end_y;
+         if (wireIndex == 2) printf("yi %d, yf %d\n", yi, yf);
         int delta_x = std::abs(xf - xi);
         int delta_y = std::abs(yf - yi);
         if(delta_x != 0 && delta_y != 0 ){
@@ -445,6 +455,7 @@ int main(int argc, char *argv[]) {
           int min_cost = initial_cost;
           struct Wire best_route = currWire;
           struct Wire* possRoutes = (struct Wire*)malloc(sizeof(struct Wire)*(delta_x + delta_y));
+          
           for (int d_x = 0; d_x < delta_x; d_x += 1 ){
             if(xi > xf)
             {
@@ -489,32 +500,38 @@ int main(int argc, char *argv[]) {
           if (random_number < SA_prob){
             std::uniform_int_distribution<> dis(0, delta_x + delta_y - 1);
             int random_index= dis(gen);
-            local_wires[wireIndex] = possRoutes[random_index];
+            local_wires[wireIndex - ((batch_ind + pid) * batch_size)] = possRoutes[random_index];
           }
           else{
-            local_wires[wireIndex] = best_route;
+            local_wires[wireIndex - ((batch_ind + pid) * batch_size)] = best_route;
           }
           free(possRoutes);
           refOccupancy(occupancy,currWire,dim_x,dim_y, 1); //added 
 
+        }
+        else{
+          local_wires[wireIndex - start] = currWire;
         }
 
       }
       // for (int w = 0; w < num_local_wires; w++){    
       //   refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
       // } 
-      int *best_bends = (int*)malloc(sizeof(int)* batch_size*2);
+      int best_bends[batch_size*2];
       for (int i = 0; i < num_local_wires; i ++) {
         best_bends[2*i] = local_wires[i].bend1_x;
         best_bends[2*i+1] = local_wires[i].bend1_y;
+        // if (i == 2) printf("%d\n", local_wires[i].start_x);
       }
 
       int wire_tot = 0;
-      int *recv_counts = (int*)malloc(sizeof(int)* nproc);
+      int recv_counts[nproc];
       for (int i = 0; i < nproc; i ++){
+        // printf("send count for proc %d is %d\n", i, send_counts[i]);
         wire_tot += send_counts[i];
         recv_counts[i] = 2*send_counts[i];
       }
+      // if (pid == 0) printf("%d\n", wire_tot);
       int *recv_all = (int*)malloc(sizeof(int)* wire_tot*2);
       
       MPI_Allgatherv(best_bends,
@@ -525,7 +542,12 @@ int main(int argc, char *argv[]) {
                     disp,
                     MPI_INT,
                     MPI_COMM_WORLD);
-
+      // if (pid == 0){
+      //   for (int i = 0; i < wire_tot*2; i ++){
+      //     printf("%d, ", recv_all[i]);
+      //   }
+      //   printf("\n");
+      // }
 
       // MPI_Gatherv((void*)local_wires,
       //             send_counts[pid],
@@ -536,35 +558,37 @@ int main(int argc, char *argv[]) {
       //             mpi_wire_struct,
       //             0, MPI_COMM_WORLD);
       //free(send_counts);
-      free(recv_counts);
-      free(disp);
-      free(best_bends);
+      // free(recv_counts);
+      // free(disp);
+      // free(best_bends);
 
       //all processors update their occupancy matrix
-        for (int i = (batch_ind * batch_size*nproc); i < std::min(num_wires,(batch_ind * batch_size*nproc) + wire_tot); i ++){
+        for (int i = (batch_ind * batch_size); i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
           
           refOccupancy(occupancy, wires[i], dim_x, dim_y, -1);
         }
       
 
-      for (int i = batch_size * batch_ind*nproc; i < (batch_size * batch_ind*nproc) + wire_tot; i ++) {
+      for (int i = batch_size * batch_ind ; i < (batch_size * batch_ind ) + wire_tot; i ++) {
         struct Wire cur_wire = wires[i];
-        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind*nproc))];
-        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind*nproc)) + 1];
+        // printf("ind = %d\n", 2 * (i - (batch_size * batch_ind)));
+        cur_wire.bend1_x = recv_all[2 * (i - (batch_size * batch_ind))];
+        cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind)) + 1];
         wires[i] = cur_wire;
       }
+      printf("%d %d \n", wires[2].bend1_x, wires[2].bend1_y);
 
       // if (pid == 0) {
         // printf("%d, %d\n", batch_ind * batch_size, num_wires);
-        for (int i = batch_ind * batch_size*nproc; i < std::min(num_wires,(batch_ind * batch_size*nproc) + wire_tot); i ++){
+        for (int i = batch_ind * batch_size ; i < std::min(num_wires,(batch_ind * batch_size) + wire_tot); i ++){
           // printf("i = %d, loop guard = %d\n", i, std::min(num_wires,(batch_ind * batch_size) + wire_tot));
           int res = refOccupancy(occupancy, wires[i], dim_x, dim_y, 1);
-          if (res == -109823498 ){
-            printf("failed here\n");
-          }
+          // if (res == -109823498 ){
+          //   printf("failed here\n");
+          // }
         }
       //}
-      free(send_counts);
+      // free(send_counts);
       free(recv_all);
 
       // int *neighbor_matrix = (int*)calloc(sizeof(int), dim_x*dim_y);
@@ -600,13 +624,13 @@ int main(int argc, char *argv[]) {
           
       //   }    
       // }
-      MPI_Barrier(MPI_COMM_WORLD);
-      MPI_Bcast(occupancy,
-              dim_x*dim_y,
-              MPI_INT,
-              0,
-              MPI_COMM_WORLD);
-      // free(neighbor_matrix);
+      // MPI_Barrier(MPI_COMM_WORLD);
+      // MPI_Bcast(occupancy,
+      //         dim_x*dim_y,
+      //         MPI_INT,
+      //         0,
+      //         MPI_COMM_WORLD);
+      // // free(neighbor_matrix);
       free(local_wires);
 
     }
@@ -624,20 +648,20 @@ int main(int argc, char *argv[]) {
 
   if (pid == 0) {
     /* Write wires and occupancy matrix to files */
-    std::vector<std::vector<int>> vec;
-    for (int i = 0; i < dim_y; ++i) {
-        std::vector<int> row;
-        for (int j = 0; j < dim_x; ++j) {
-            row.push_back(occupancy[i * dim_x + j]);
-        }
-        vec.push_back(row);
-    }
+    // std::vector<std::vector<int>> vec;
+    // for (int i = 0; i < dim_y; ++i) {
+    //     std::vector<int> row;
+    //     for (int j = 0; j < dim_x; ++j) {
+    //         row.push_back(occupancy[i * dim_x + j]);
+    //     }
+    //     vec.push_back(row);
+    // }
     
 
-    print_stats(vec);
-    write_output(wires, num_wires, vec, dim_x, dim_y, nproc, input_filename);
+    print_stats(occupancy);
+    write_output(wires, num_wires, occupancy, dim_x, dim_y, nproc, input_filename);
   }
-  free(occupancy);
+  // free(occupancy);
 
   // Cleanup
   MPI_Finalize();
