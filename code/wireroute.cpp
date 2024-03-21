@@ -446,7 +446,6 @@ int main(int argc, char *argv[]) {
         yi = currWire.start_y;
         xf = currWire.end_x;
         yf = currWire.end_y;
-         if (wireIndex == 2) printf("yi %d, yf %d\n", yi, yf);
         int delta_x = std::abs(xf - xi);
         int delta_y = std::abs(yf - yi);
         if(delta_x != 0 && delta_y != 0 ){
@@ -500,10 +499,10 @@ int main(int argc, char *argv[]) {
           if (random_number < SA_prob){
             std::uniform_int_distribution<> dis(0, delta_x + delta_y - 1);
             int random_index= dis(gen);
-            local_wires[wireIndex - ((batch_ind + pid) * batch_size)] = possRoutes[random_index];
+            local_wires[wireIndex - start] = possRoutes[random_index];
           }
           else{
-            local_wires[wireIndex - ((batch_ind + pid) * batch_size)] = best_route;
+            local_wires[wireIndex - start] = best_route;
           }
           free(possRoutes);
           refOccupancy(occupancy,currWire,dim_x,dim_y, 1); //added 
@@ -514,24 +513,19 @@ int main(int argc, char *argv[]) {
         }
 
       }
-      // for (int w = 0; w < num_local_wires; w++){    
-      //   refOccupancy(occupancy, local_wires[w], dim_x, dim_y, 1);
-      // } 
+
       int best_bends[batch_size*2];
       for (int i = 0; i < num_local_wires; i ++) {
         best_bends[2*i] = local_wires[i].bend1_x;
         best_bends[2*i+1] = local_wires[i].bend1_y;
-        // if (i == 2) printf("%d\n", local_wires[i].start_x);
       }
 
       int wire_tot = 0;
       int recv_counts[nproc];
       for (int i = 0; i < nproc; i ++){
-        // printf("send count for proc %d is %d\n", i, send_counts[i]);
         wire_tot += send_counts[i];
         recv_counts[i] = 2*send_counts[i];
       }
-      // if (pid == 0) printf("%d\n", wire_tot);
       int *recv_all = (int*)malloc(sizeof(int)* wire_tot*2);
       
       MPI_Allgatherv(best_bends,
@@ -542,12 +536,7 @@ int main(int argc, char *argv[]) {
                     disp,
                     MPI_INT,
                     MPI_COMM_WORLD);
-      // if (pid == 0){
-      //   for (int i = 0; i < wire_tot*2; i ++){
-      //     printf("%d, ", recv_all[i]);
-      //   }
-      //   printf("\n");
-      // }
+
 
       // MPI_Gatherv((void*)local_wires,
       //             send_counts[pid],
@@ -576,7 +565,6 @@ int main(int argc, char *argv[]) {
         cur_wire.bend1_y = recv_all[2 * (i - (batch_size * batch_ind)) + 1];
         wires[i] = cur_wire;
       }
-      printf("%d %d \n", wires[2].bend1_x, wires[2].bend1_y);
 
       // if (pid == 0) {
         // printf("%d, %d\n", batch_ind * batch_size, num_wires);
